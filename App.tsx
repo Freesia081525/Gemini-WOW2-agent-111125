@@ -15,8 +15,6 @@ import { PlusIcon, PlayIcon, UploadIcon, DocumentIcon, FileTextIcon, SettingsIco
 declare const pdfjsLib: any;
 
 // --- Unified API Service Logic ---
-// This section replaces the need for a separate apiService.ts file.
-
 let geminiAI: GoogleGenerativeAI | null = null;
 let openai: OpenAI | null = null;
 
@@ -92,12 +90,10 @@ const performOcrWithGemini = async (imageDataBase64: string): Promise<string> =>
 
 // --- Constants & Hooks ---
 
-// NOTE: Using stable, known model names. 
-// "gpt-5-nano" and "gemini-2.5-flash-lite" are speculative.
 export const MODEL_OPTIONS = [
     { value: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     { value: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini' },
-    { value: 'openai/gpt-4.1-mini', label: 'OpenAI GPT-4.1 mini' },
+    { value: 'openai/gpt-4.1-mini', label: 'OpenAI GPT-4.1 Mini' },
 ];
 
 function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -256,6 +252,26 @@ const App: React.FC = () => {
       } catch (e) { return null; }
   };
   
+  const analyzeResults = (currentAgents: Agent[]) => {
+      const sentimentAgent = currentAgents.find(a => a.name === 'Sentiment Analyzer' && a.status === AgentStatus.Success);
+      const entityAgent = currentAgents.find(a => a.name === 'Entity Extractor' && a.status === AgentStatus.Success);
+      let newAnalysis: AnalysisResult = { sentiment: null, entities: null };
+
+      if(sentimentAgent?.outputJson?.sentiment) {
+          const s = sentimentAgent.outputJson.sentiment.toLowerCase();
+          if (s === 'positive') newAnalysis.sentiment = { positive: 1, negative: 0, neutral: 0 };
+          else if (s === 'negative') newAnalysis.sentiment = { positive: 0, negative: 1, neutral: 0 };
+          else newAnalysis.sentiment = { positive: 0, negative: 0, neutral: 1 };
+      }
+      if(entityAgent?.outputJson && Array.isArray(entityAgent.outputJson)) {
+        newAnalysis.entities = entityAgent.outputJson.filter(e => e.name && e.type);
+      }
+      if(newAnalysis.sentiment || (newAnalysis.entities && newAnalysis.entities.length > 0)) {
+          setAnalysisResult(newAnalysis);
+          setActiveTab('dashboard');
+      }
+  };
+
   const runWorkflow = useCallback(async () => {
     const requiredProviders = new Set(agents.map(a => a.model.split('/')[0]));
     if (requiredProviders.has('gemini') && !isGeminiKeySet) {
@@ -295,6 +311,7 @@ const App: React.FC = () => {
         break;
       }
     }
+    analyzeResults(currentAgents);
     setIsProcessing(false);
   }, [agents, documentFile.content, isGeminiKeySet, isOpenAIKeySet, setUserGeminiApiKey, setUserOpenAIApiKey]);
   
@@ -334,8 +351,47 @@ const App: React.FC = () => {
     </div>
   );
   
-  const NotesEditor = () => { /* ... (no changes needed) ... */ return <div>Notes Editor</div> };
-  const TabButton = ({ tabName, label }: { tabName: string, label: string }) => ( /* ... (no changes needed) ... */ <button onClick={() => setActiveTab(tabName)}>{label}</button> );
+  const NotesEditor = () => {
+    const [notes, setNotes] = useLocalStorage('reviewNotes', `# ${T.yourNotes}\n\n`);
+    const [textToColor, setTextToColor] = useState('');
+    const [color, setColor] = useState('#E91E63');
+
+    const applyColor = () => {
+        if (!textToColor.trim()) return;
+        const coloredText = `<span style="color: ${color}; font-weight: 600;">${textToColor}</span>`;
+        setNotes(notes.replace(textToColor, coloredText));
+        setTextToColor('');
+    };
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
+            <div>
+                <h3 className="text-lg font-semibold mb-2">{T.yourNotes}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full h-80 p-3 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-primary transition" />
+                    <div>
+                        <h4 className="font-semibold mb-2">{T.notesPreview}</h4>
+                        <div className="prose prose-sm dark:prose-invert max-w-none h-80 p-3 overflow-y-auto bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-md" dangerouslySetInnerHTML={{ __html: notes.replace(/\n/g, '<br/>') }} />
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h3 className="text-lg font-semibold mb-2">{T.textToColor}</h3>
+                <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <input type="text" value={textToColor} onChange={e => setTextToColor(e.target.value)} placeholder={T.textToColorPlaceholder} className="flex-grow p-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-primary transition" />
+                    <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-10 p-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 rounded-md cursor-pointer" />
+                    <button onClick={applyColor} className="px-4 py-2 bg-primary text-white rounded-lg shadow hover:opacity-90 transition-opacity">{T.applyColor}</button>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  const TabButton = ({ tabName, label }: { tabName: string, label: string }) => (
+    <button onClick={() => setActiveTab(tabName)} className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${activeTab === tabName ? 'bg-primary text-white shadow' : 'text-gray-600 dark:text-gray-300 hover:bg-primary/10'}`}>
+        {label}
+    </button>
+  );
 
   return (
     <div style={{'--primary': activeTheme.colors.primary} as React.CSSProperties} className="font-sans text-gray-800 dark:text-gray-200 min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -351,13 +407,48 @@ const App: React.FC = () => {
                     <button onClick={() => setIsApiKeyModalOpen(true)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="API Key Settings">
                         <KeyIcon className="w-5 h-5 text-gray-600 dark:text-gray-300"/>
                     </button>
-                    {/* Other settings dropdown can go here */}
+                    <div className="relative group">
+                        <button className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                            <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-300"/>
+                        </button>
+                        <div className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 border border-gray-200 dark:border-gray-700 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all duration-200 transform scale-95 group-hover:scale-100">
+                           <h3 className="font-semibold mb-3 text-sm">{T.settings}</h3>
+                           <div className="space-y-3">
+                                <label className="flex items-center gap-2 text-sm">
+                                    <PaletteIcon className="w-5 h-5 text-primary"/>
+                                    <span className="flex-grow">{T.style}</span>
+                                    <select value={themeIndex} onChange={e => setThemeIndex(Number(e.target.value))} className="text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md p-1">
+                                        {FLOWER_THEMES.map((theme, i) => <option key={i} value={i}>{theme.name}</option>)}
+                                    </select>
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <LanguageIcon className="w-5 h-5 text-primary"/>
+                                    <span className="flex-grow">{T.language}</span>
+                                    <select value={lang} onChange={e => setLang(e.target.value as 'en' | 'zh-TW')} className="text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md p-1">
+                                        <option value="en">English</option>
+                                        <option value="zh-TW">繁體中文</option>
+                                    </select>
+                                </label>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="flex items-center gap-2"><SunIcon className="w-5 h-5 text-primary"/>{T.mode}</span>
+                                    <div className="flex items-center p-0.5 bg-gray-200 dark:bg-gray-700 rounded-full">
+                                        <button onClick={() => setIsDarkMode(false)} className={`p-1 rounded-full ${!isDarkMode ? 'bg-white shadow' : ''}`}><SunIcon className={`w-4 h-4 ${!isDarkMode ? 'text-yellow-500' : 'text-gray-400'}`}/></button>
+                                        <button onClick={() => setIsDarkMode(true)} className={`p-1 rounded-full ${isDarkMode ? 'bg-gray-800 shadow' : ''}`}><MoonIcon className={`w-4 h-4 ${isDarkMode ? 'text-indigo-400' : 'text-gray-400'}`}/></button>
+                                    </div>
+                                </div>
+                           </div>
+                        </div>
+                    </div>
                  </div>
              </div>
         </header>
 
         <main className="max-w-screen-xl mx-auto p-4 md:p-6">
-            {/* ... Your Tab Buttons ... */}
+            <div className="flex justify-center mb-6 bg-white/50 dark:bg-gray-800/50 p-1.5 rounded-lg shadow-sm w-fit mx-auto">
+                <TabButton tabName="workflow" label={T.workflow} />
+                <TabButton tabName="dashboard" label={T.dashboard} />
+                <TabButton tabName="notes" label={T.notes} />
+            </div>
 
             {activeTab === 'workflow' && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -435,9 +526,54 @@ const App: React.FC = () => {
                 </div>
             )}
             
-            {/* Placeholder for other tabs */}
-            {activeTab === 'dashboard' && <div className="text-center p-10 bg-white dark:bg-gray-800 rounded-xl">Dashboard Content</div>}
-            {activeTab === 'notes' && <div className="text-center p-10 bg-white dark:bg-gray-800 rounded-xl">Notes Editor Content</div>}
+            {activeTab === 'dashboard' && (
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+                    <h2 className="text-lg font-semibold mb-4">{T.resultsDashboard}</h2>
+                    {analysisResult ? (
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {analysisResult.entities && analysisResult.entities.length > 0 && (
+                                <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+                                    <h3 className="font-semibold mb-2">{T.extractedEntities}</h3>
+                                    <div className="h-80 overflow-y-auto">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={Object.entries(analysisResult.entities.reduce((acc, curr) => { acc[curr.type] = (acc[curr.type] || 0) + 1; return acc; }, {} as Record<string, number>)).map(([name, value]) => ({ name, count: value }))} layout="vertical" margin={{ top: 5, right: 20, left: 40, bottom: 5 }}>
+                                                <XAxis type="number" hide />
+                                                <YAxis type="category" dataKey="name" width={80} tick={{fontSize: 12, fill: isDarkMode ? '#A0AEC0' : '#4A5568'}}/>
+                                                <Tooltip cursor={{fill: 'rgba(128, 128, 128, 0.1)'}}/>
+                                                <Bar dataKey="count" fill="var(--primary)" barSize={20} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+                            {analysisResult.sentiment && (
+                                <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col items-center">
+                                    <h3 className="font-semibold mb-2">{T.sentimentAnalysis}</h3>
+                                    <div className="w-full h-80">
+                                        <ResponsiveContainer>
+                                            <PieChart>
+                                                <Pie data={[{ name: 'Positive', value: analysisResult.sentiment.positive }, { name: 'Negative', value: analysisResult.sentiment.negative }, { name: 'Neutral', value: analysisResult.sentiment.neutral }]} cx="50%" cy="50%" outerRadius={100} dataKey="value" labelLine={false} label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                                                    <Cell key="positive" fill="#22c55e" />
+                                                    <Cell key="negative" fill="#ef4444" />
+                                                    <Cell key="neutral" fill="#6b7280" />
+                                                </Pie>
+                                                <Tooltip />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                            <p className="text-gray-500">Run a workflow with 'Sentiment' or 'Entity' agents to see results here.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'notes' && <NotesEditor />}
         </main>
     </div>
   );
