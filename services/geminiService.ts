@@ -61,7 +61,7 @@ export const performOcr = async (imageDataBase64: string): Promise<string> => {
   };
   
   try {
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent([textPart, imagePart]);
     const response = await result.response;
     return response.text();
