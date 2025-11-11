@@ -3,15 +3,15 @@ import { Agent, AgentStatus } from './types';
 export const DEFAULT_AGENTS: Omit<Agent, 'id' | 'status' | 'output' | 'error' | 'outputJson'>[] = [
   {
     name: 'Summarizer',
-    prompt: 'Summarize the following document content in three key bullet points. Be concise and accurate.',
+    prompt: '你是一位醫療器材法規專家。根據提供的文件，進行繁體中文摘要in markdown with keywords in coral color. Please also create a table include 20 key items。',
   },
   {
     name: 'Entity Extractor',
-    prompt: 'Extract all named entities (people, organizations, locations, dates) from the document. Respond with ONLY a valid JSON array of objects, where each object has "name" and "type" keys. Example: [{"name": "Jane Doe", "type": "Person"}]',
+    prompt: 'Please create 30 entities (people, organizations, locations, dates) from the document in a table and a JSON object. Respond with a valid JSON array of objects, where each object has "name" and "type" keys. Example: [{"name": "Jane Doe", "type": "Person"}]',
   },
   {
-    name: 'Sentiment Analyzer',
-    prompt: 'Analyze the overall sentiment of the document. Is it positive, negative, or neutral? Provide a confidence score. Respond with ONLY a valid JSON object with "sentiment" and "confidence" keys. Example: {"sentiment": "Positive", "confidence": 0.95}',
+    name: 'Comparison Analyzer',
+    prompt: '你是一位醫療器材審查摘要專家。根據上傳之檔案(包含English origional and traditional chinese breif translateion），please compare English origional and traditional chinese breif translateion and summarize 20 difference in a table in traditional chinese with ref pages and comments in traditional chinese. Please also create a summary about the comparison results in 繁體中文。',
   },
   {
     name: 'Compliance Check',
