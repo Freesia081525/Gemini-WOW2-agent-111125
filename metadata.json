@@ -1,0 +1,5 @@
+{
+  "name": "Agentic AI Document Intelligence Workbench",
+  "description": "An advanced web application for analyzing documents using a multi-step, agent-based AI workflow. Users can upload documents, define a sequence of AI agents to process the content, and visualize the results in a dynamic dashboard.",
+  "requestFramePermissions": []
+}
